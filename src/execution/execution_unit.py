@@ -1,26 +1,19 @@
-"""
-指令执行单元实现 - 同学A负责
-"""
 import sys
 from typing import Dict, Optional, List
 from interfaces.types import Instruction, RegisterMap, ConditionCodes
 from memory.memory_unit import MemoryUnit
 
-# ========== 指令执行单元 - 同学A负责 ==========
 class ExecutionUnit:
-    """指令执行单元，负责指令解码和算术运算"""
+    # 指令执行单元，负责指令解码和算术运算
     
     def __init__(self):
-        # 寄存器文件
         self.registers: List[int] = [0] * 15
         self.registers[4] = 0
         
-        # 条件码
-        self.ZF: int = 1  # 零标志
-        self.SF: int = 0  # 符号标志
-        self.OF: int = 0  # 溢出标志
+        self.ZF: int = 1
+        self.SF: int = 0
+        self.OF: int = 0
         
-        # 指令集映射 - 修复：添加所有条件传送指令
         self.instruction_set = {
             '00': 'halt', '10': 'nop',
             '20': 'rrmovq', '21': 'cmovle', '22': 'cmovl', '23': 'cmove',
@@ -33,9 +26,8 @@ class ExecutionUnit:
         }
     
     def decode_instruction(self, pc: int, memory: MemoryUnit) -> Instruction:
-        """解码指令 - 同学A负责"""
+        # 解码指令
         try:
-            # 读取操作码
             opcode_byte = memory.read_byte(pc)
             if opcode_byte is None:
                 raise ValueError(f"无法读取地址 {pc} 的操作码")
@@ -48,9 +40,7 @@ class ExecutionUnit:
             instr_type = self.instruction_set[opcode]
             instr = Instruction(opcode=opcode, length=1, address=pc)
             
-            # 根据指令类型解码
             if instr_type == 'rrmovq' or opcode[0] == '2':
-                # 所有以2开头的指令：2字节
                 instr.length = 2
                 byte2 = memory.read_byte(pc + 1)
                 if byte2 is not None:
@@ -58,7 +48,6 @@ class ExecutionUnit:
                     instr.rB = byte2 & 0xF
                     
             elif instr_type == 'irmovq':
-                # 立即数传送：10字节
                 instr.length = 10
                 byte2 = memory.read_byte(pc + 1)
                 if byte2 is not None:
@@ -68,7 +57,6 @@ class ExecutionUnit:
                     instr.immediate = imm
                     
             elif instr_type in ['rmmovq', 'mrmovq']:
-                # 内存访问指令：10字节
                 instr.length = 10
                 byte2 = memory.read_byte(pc + 1)
                 if byte2 is not None:
@@ -79,7 +67,6 @@ class ExecutionUnit:
                     instr.immediate = imm
                     
             elif instr_type in ['addq', 'subq', 'andq', 'xorq']:
-                # 算术运算：2字节
                 instr.length = 2
                 byte2 = memory.read_byte(pc + 1)
                 if byte2 is not None:
@@ -87,40 +74,34 @@ class ExecutionUnit:
                     instr.rB = byte2 & 0xF
                     
             elif opcode[0] == '7' or instr_type == 'call':
-                # 跳转和调用：9字节
                 instr.length = 9
                 imm = memory.extract_immediate(pc + 1)
                 if imm is not None:
                     instr.immediate = imm
                     
             elif instr_type in ['pushq', 'popq']:
-                # 栈操作：2字节
                 instr.length = 2
                 byte2 = memory.read_byte(pc + 1)
                 if byte2 is not None:
                     instr.rA = (byte2 >> 4) & 0xF
                     
             elif instr_type == 'nop':
-                # nop指令：1字节
                 instr.length = 1
                 
             elif instr_type == 'halt':
-                # halt指令：1字节
                 instr.length = 1
                 
             elif instr_type == 'ret':
-                # ret指令：1字节
                 instr.length = 1
                 
             return instr
             
         except Exception as e:
             print(f"解码指令错误 at PC={pc}: {e}", file=sys.stderr)
-            # 返回一个默认指令
             return Instruction(opcode='00', length=1, address=pc)
     
     def execute_arithmetic(self, instr: Instruction) -> bool:
-        """执行算术运算指令 - 同学A负责"""
+        # 执行算术运算指令
         instr_type = self.instruction_set.get(instr.opcode)
         
         if instr_type == 'addq':
@@ -135,7 +116,7 @@ class ExecutionUnit:
         return False
     
     def execute_addq(self, rA: int, rB: int) -> bool:
-        """执行addq指令 - 同学A负责"""
+        # 执行addq指令
         valA = self.get_register_value(rA)
         valB = self.get_register_value(rB)
         result = valB + valA
@@ -145,7 +126,7 @@ class ExecutionUnit:
         return True
     
     def execute_subq(self, rA: int, rB: int) -> bool:
-        """执行subq指令 - 同学A负责"""
+        # 执行subq指令
         valA = self.get_register_value(rA)
         valB = self.get_register_value(rB)
         result = valB - valA
@@ -155,7 +136,7 @@ class ExecutionUnit:
         return True
     
     def execute_andq(self, rA: int, rB: int) -> bool:
-        """执行andq指令 - 同学A负责"""
+        # 执行andq指令
         valA = self.get_register_value(rA)
         valB = self.get_register_value(rB)
         result = valB & valA
@@ -165,7 +146,7 @@ class ExecutionUnit:
         return True
     
     def execute_xorq(self, rA: int, rB: int) -> bool:
-        """执行xorq指令 - 同学A负责"""
+        # 执行xorq指令
         valA = self.get_register_value(rA)
         valB = self.get_register_value(rB)
         result = valB ^ valA
@@ -175,7 +156,7 @@ class ExecutionUnit:
         return True
     
     def execute_move(self, instr: Instruction, memory: MemoryUnit) -> bool:
-        """执行数据传送指令 - 同学A负责"""
+        # 执行数据传送指令
         instr_type = self.instruction_set.get(instr.opcode)
         
         if instr_type == 'rrmovq':
@@ -190,23 +171,19 @@ class ExecutionUnit:
         return False
     
     def execute_rrmovq(self, rA: int, rB: int) -> bool:
-        """执行rrmovq指令 - 同学A负责"""
         self.set_register_value(rB, self.get_register_value(rA))
         return True
     
     def execute_irmovq(self, rB: int, immediate: int) -> bool:
-        """执行irmovq指令 - 同学A负责"""
         self.set_register_value(rB, immediate)
         return True
     
     def execute_rmmovq(self, rA: int, rB: int, offset: int, memory: MemoryUnit) -> bool:
-        """执行rmmovq指令 - 同学A负责"""
         address = self.get_register_value(rB) + offset
         value = self.get_register_value(rA)
         return memory.write_memory_64(address, value)
     
     def execute_mrmovq(self, rA: int, rB: int, offset: int, memory: MemoryUnit) -> bool:
-        """执行mrmovq指令 - 同学A负责"""
         address = self.get_register_value(rB) + offset
         value = memory.read_memory_64(address)
         if value is not None:
@@ -215,23 +192,23 @@ class ExecutionUnit:
         return False
     
     def execute_conditional_move(self, instr: Instruction) -> bool:
-        """执行条件传送指令 - 同学A负责"""
-        condition_code = instr.opcode[1]  # 获取第二个字符
+        # 执行条件传送指令
+        condition_code = instr.opcode[1]
         
         condition_met = False
-        if condition_code == '0':  # rrmovq (无条件)
+        if condition_code == '0':
             condition_met = True
-        elif condition_code == '1':  # cmovle
+        elif condition_code == '1':
             condition_met = self.ZF or (self.SF != self.OF)
-        elif condition_code == '2':  # cmovl
+        elif condition_code == '2':
             condition_met = (self.SF != self.OF)
-        elif condition_code == '3':  # cmove
+        elif condition_code == '3':
             condition_met = self.ZF
-        elif condition_code == '4':  # cmovne
+        elif condition_code == '4':
             condition_met = not self.ZF
-        elif condition_code == '5':  # cmovge
+        elif condition_code == '5':
             condition_met = (self.SF == self.OF)
-        elif condition_code == '6':  # cmovg
+        elif condition_code == '6':
             condition_met = (not self.ZF) and (self.SF == self.OF)
         
         if condition_met:
@@ -240,42 +217,34 @@ class ExecutionUnit:
         return True
     
     def update_condition_codes(self, result: int, valA: int, valB: int, operation: str):
-        """更新条件码 - 同学A负责"""
-        # 更新ZF和SF
+        # 更新条件码
         self.ZF = 1 if result == 0 else 0
         self.SF = 1 if result < 0 else 0
         
-        # 更新OF
         if operation == 'add':
-            # 加法溢出：正+正=负 或 负+负=正
             self.OF = 1 if ((valA > 0 and valB > 0 and result < 0) or 
                            (valA < 0 and valB < 0 and result > 0)) else 0
         elif operation == 'sub':
-            # 减法溢出：valB - valA
             if (valB >= 0 and valA < 0 and result < 0) or \
                (valB < 0 and valA >= 0 and result > 0):
                 self.OF = 1
             else:
                 self.OF = 0
         else:
-            # andq 和 xorq 不会溢出
             self.OF = 0
     
     def get_register_value(self, reg_index: int) -> int:
-        """获取寄存器值 - 同学A负责"""
         if 0 <= reg_index < len(self.registers):
             return self.registers[reg_index]
         return 0
     
     def set_register_value(self, reg_index: int, value: int) -> bool:
-        """设置寄存器值 - 同学A负责"""
         if 0 <= reg_index < len(self.registers):
             self.registers[reg_index] = value
             return True
         return False
     
     def get_all_registers(self) -> RegisterMap:
-        """获取所有寄存器状态 - 同学A负责"""
         reg_names = [
             'rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi',
             'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14'
@@ -283,5 +252,4 @@ class ExecutionUnit:
         return {name: self.registers[i] for i, name in enumerate(reg_names)}
     
     def get_condition_codes(self) -> ConditionCodes:
-        """获取条件码 - 同学A负责"""
         return {'ZF': self.ZF, 'SF': self.SF, 'OF': self.OF}
