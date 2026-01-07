@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Y86-64 Visualizer | XSimple</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            overflow: hidden;
+        }
+
+        /* 顶部控制栏 */
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 12px 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: #667eea;
+            flex-shrink: 0;
+        }
+
+        input[type="text"] {
+            padding: 8px 12px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            width: 150px;
+            transition: border 0.3s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 8px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .step-info {
+            font-size: 18px;
+            font-weight: bold;
+            color: #667eea;
+            min-width: 120px;
+            text-align: center;
+        }
+
+        /* 主容器 */
+        .main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            overflow: hidden;
+        }
+
+        /* 左侧：代码面板 */
+        .code-panel {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        .code-panel h2 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 5px;
+        }
+
+        .code-line {
+            font-size: 15px;
+            padding: 4px 8px;
+            white-space: pre;
+            border-left: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .code-line.active {
+            background: linear-gradient(90deg, #fff176 0%, #fffde7 100%);
+            border-left-color: #f57c00;
+            font-weight: bold;
+            font-size: 16px;
+            box-shadow: 0 2px 8px rgba(245, 124, 0, 0.3);
+        }
+
+        /* 右侧：状态面板 */
+        .state-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            padding: 15px;
+        }
+
+        .card h2 {
+            font-size: 18px;
+            color: #667eea;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 5px;
+        }
+
+        /* CPU 状态网格 */
+        .cpu-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .cpu-item {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 6px;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .cpu-item.changed {
+            background: #ffebee;
+            border-color: #e53935;
+            animation: pulse 0.5s;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+        }
+
+        .cpu-label {
+            font-size: 13px;
+            color: #666;
+            font-weight: bold;
+        }
+
+        .cpu-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-top: 5px;
+        }
+
+        .cpu-item.changed .cpu-value {
+            color: #e53935;
+        }
+
+        /* 页签切换 */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px;
+            background: #e0e0e0;
+            border: none;
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .tab.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .tab:hover:not(.active) {
+            background: #d0d0d0;
+        }
+
+        /* 🔔 新增：通知徽章 */
+        .tab-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #e53935;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: bold;
+            animation: shake 0.5s infinite;
+            box-shadow: 0 2px 8px rgba(229, 57, 53, 0.5);
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: rotate(0deg);
+            }
+
+            25% {
+                transform: rotate(-10deg);
+            }
+
+            75% {
+                transform: rotate(10deg);
+            }
+        }
+
+        /* 页签内容 */
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* 寄存器网格 (4x4) */
+        .reg-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .reg-box {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 8px;
+            border: 3px solid #ddd;
+            transition: all 0.3s;
+            text-align: center;
+        }
+
+        .reg-box.changed {
+            background: #ffebee;
+            border-color: #e53935;
+            animation: pulse 0.5s;
+        }
+
+        .reg-name {
+            font-size: 14px;
+            font-weight: bold;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .reg-box.changed .reg-name {
+            color: #e53935;
+        }
+
+        .reg-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            word-break: break-all;
+        }
+
+        .reg-box.changed .reg-value {
+            color: #e53935;
+        }
+
+        /* 内存表格 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th {
+            background: #667eea;
+            color: white;
+            padding: 10px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        tr.changed {
+            background: #ffebee;
+            animation: pulse 0.5s;
+        }
+
+        tr.changed td {
+            color: #e53935;
+            font-weight: bold;
+        }
+
+        .empty {
+            text-align: center;
+            color: #999;
+            font-style: italic;
+            padding: 20px;
+        }
+
+        /* 滚动条美化 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #5568d3;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <h1>🚀 Y86-64 Visualizer</h1>
+        <input type="text" id="progName" value="prog1" placeholder="程序名">
+        <button onclick="loadProgram()">加载程序</button>
+        <div style="flex: 1;"></div>
+        <button onclick="prevStep()" id="btnPrev">← 上一步</button>
+        <div class="step-info" id="stepInfo">Step 0/0</div>
+        <button onclick="nextStep()" id="btnNext">下一步 →</button>
+    </div>
+
+    <div class="main">
+        <!-- 左侧：汇编代码 -->
+        <div class="code-panel">
+            <h2>📄 Assembly Code</h2>
+            <div id="codeContainer">
+                <div class="empty">请点击"加载程序"</div>
+            </div>
+        </div>
+
+        <!-- 右侧：程序状态 -->
+        <div class="state-panel">
+            <!-- CPU 状态 -->
+            <div class="card">
+                <h2>💻 CPU Status</h2>
+                <div class="cpu-grid" id="cpuStatus"></div>
+            </div>
+
+            <!-- 寄存器和内存切换卡片 -->
+            <div class="card" style="flex: 1; display: flex; flex-direction: column;">
+                <h2>📊 State Viewer</h2>
+
+                <!-- 页签 -->
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('registers')" id="tab-btn-registers">
+                        📋 寄存器
+                    </button>
+                    <button class="tab" onclick="switchTab('memory')" id="tab-btn-memory">
+                        💾 内存
+                    </button>
+                </div>
+
+                <!-- 寄存器页签内容 -->
+                <div id="tab-registers" class="tab-content active" style="flex: 1; overflow-y: auto;">
+                    <div class="reg-grid" id="regGrid"></div>
+                </div>
+
+                <!-- 内存页签内容 -->
+                <div id="tab-memory" class="tab-content" style="flex: 1; overflow-y: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>地址</th>
+                                <th>值 (Dec)</th>
+                                <th>值 (Hex)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="memBody">
+                            <tr>
+                                <td colspan="3" class="empty">无数据</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 0;
+        let trace = [];
+        let codeLines = [];
+        let pcToLineMap = {};
+        let currentTab = 'registers'; // 当前激活的页签
+
+        // 15个寄存器的顺序（按4x4布局）
+        const registerOrder = [
+            'rax', 'rbx', 'rcx', 'rdx',
+            'rsi', 'rdi', 'rsp', 'rbp',
+            'r8', 'r9', 'r10', 'r11',
+            'r12', 'r13', 'r14', ''  // 最后一个空位
+        ];
+
+        async function loadProgram() {
+            const name = document.getElementById('progName').value.trim();
+            if (!name) return alert('请输入程序名！');
+
+            try {
+                const yoRes = await fetch(`test/${name}.yo`);
+                const yoText = await yoRes.text();
+
+                const jsonRes = await fetch(`answer/${name}.json`);
+                trace = await jsonRes.json();
+
+                parseCode(yoText);
+                currentStep = 0;
+                updateUI();
+
+            } catch (e) {
+                alert('加载失败：' + e.message + '\n请确保在 Web 服务器环境运行！');
+                console.error(e);
+            }
+        }
+
+        function parseCode(text) {
+            codeLines = text.split('\n');
+            pcToLineMap = {};
+
+            const container = document.getElementById('codeContainer');
+            container.innerHTML = '';
+
+            codeLines.forEach((line, i) => {
+                const div = document.createElement('div');
+                div.className = 'code-line';
+                div.id = `line${i}`;
+                div.textContent = line;
+                container.appendChild(div);
+
+                const match = line.match(/^\s*(0x[0-9a-fA-F]+):/);
+                if (match) {
+                    pcToLineMap[parseInt(match[1], 16)] = i;
+                }
+            });
+        }
+
+        function prevStep() {
+            if (currentStep > 0) {
+                currentStep--;
+                updateUI();
+            }
+        }
+
+        function nextStep() {
+            if (currentStep < trace.length - 1) {
+                currentStep++;
+                updateUI();
+            }
+        }
+
+        function switchTab(tabName) {
+            // 切换页签按钮状态
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.getElementById(`tab-btn-${tabName}`).classList.add('active');
+
+            // 切换内容显示
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            // 🔔 切换到该页签时，移除该页签的通知徽章
+            currentTab = tabName;
+            removeBadge(tabName);
+        }
+
+        // 🔔 新增：添加通知徽章
+        function addBadge(tabName) {
+            const btn = document.getElementById(`tab-btn-${tabName}`);
+            // 如果已经有徽章，或者当前就在该页签，不添加
+            if (btn.querySelector('.tab-badge') || currentTab === tabName) return;
+
+            const badge = document.createElement('span');
+            badge.className = 'tab-badge';
+            badge.textContent = '!';
+            btn.appendChild(badge);
+        }
+
+        // 🔔 新增：移除通知徽章
+        function removeBadge(tabName) {
+            const btn = document.getElementById(`tab-btn-${tabName}`);
+            const badge = btn.querySelector('.tab-badge');
+            if (badge) {
+                badge.remove();
+            }
+        }
+
+        function updateUI() {
+            const state = trace[currentStep];
+            const prev = currentStep > 0 ? trace[currentStep - 1] : null;
+
+            // 更新步骤信息
+            document.getElementById('stepInfo').textContent = `Step ${currentStep + 1}/${trace.length}`;
+            document.getElementById('btnPrev').disabled = currentStep === 0;
+            document.getElementById('btnNext').disabled = currentStep === trace.length - 1;
+
+            // 高亮当前代码行
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (pcToLineMap[state.PC] !== undefined) {
+                const line = document.getElementById(`line${pcToLineMap[state.PC]}`);
+                if (line) {
+                    line.classList.add('active');
+                    line.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+
+            // CPU 状态
+            const cpuDiv = document.getElementById('cpuStatus');
+            cpuDiv.innerHTML = '';
+
+            addCpuItem(cpuDiv, 'PC', `0x${state.PC.toString(16)}`, prev && prev.PC !== state.PC);
+            addCpuItem(cpuDiv, 'STAT', state.STAT, prev && prev.STAT !== state.STAT);
+
+            const ccStr = `ZF=${state.CC.ZF} SF=${state.CC.SF} OF=${state.CC.OF}`;
+            const prevCC = prev ? `ZF=${prev.CC.ZF} SF=${prev.CC.SF} OF=${prev.CC.OF}` : ccStr;
+            addCpuItem(cpuDiv, 'CC', ccStr, ccStr !== prevCC);
+
+            // 🔔 检查寄存器是否有变化
+            let hasRegChange = false;
+
+            // 寄存器 (4x4网格，显示所有15个)
+            const regGrid = document.getElementById('regGrid');
+            regGrid.innerHTML = '';
+
+            registerOrder.forEach(regName => {
+                const box = document.createElement('div');
+
+                if (regName === '') {
+                    // 空位
+                    box.className = 'reg-box';
+                    box.style.visibility = 'hidden';
+                } else {
+                    const val = state.REG[regName];
+                    const prevVal = prev ? prev.REG[regName] : val;
+                    const changed = val !== prevVal;
+
+                    if (changed) hasRegChange = true;
+
+                    box.className = 'reg-box' + (changed ? ' changed' : '');
+                    box.innerHTML = `
+                <div class="reg-name">${regName}</div>
+                <div class="reg-value">${val}</div>
+            `;
+                }
+
+                regGrid.appendChild(box);
+            });
+
+            // 🔔 如果寄存器有变化且当前不在寄存器页签，显示徽章
+            if (hasRegChange && currentTab !== 'registers') {
+                addBadge('registers');
+            }
+
+            // 🔔 检查内存是否有变化
+            let hasMemChange = false;
+
+            // 内存表格
+            const memBody = document.getElementById('memBody');
+            memBody.innerHTML = '';
+
+            const memAddrs = Object.keys(state.MEM).map(Number).sort((a, b) => a - b);
+
+            if (memAddrs.length === 0) {
+                memBody.innerHTML = '<tr><td colspan="3" class="empty">无内存数据</td></tr>';
+            } else {
+                memAddrs.forEach(addr => {
+                    const val = state.MEM[addr];
+                    const prevVal = prev && prev.MEM ? prev.MEM[addr] : undefined;
+                    const changed = prevVal === undefined || val !== prevVal;
+
+                    if (changed) hasMemChange = true;
+
+                    const row = document.createElement('tr');
+                    if (changed) row.className = 'changed';
+
+                    row.innerHTML = `
+                <td>0x${addr.toString(16)}</td>
+                <td>${val}</td>
+                <td>0x${(BigInt(val) & BigInt('0xFFFFFFFFFFFFFFFF')).toString(16).toUpperCase().padStart(16, '0')}</td>
+            `;
+                    memBody.appendChild(row);
+                });
+            }
+
+            // 🔔 如果内存有变化且当前不在内存页签，显示徽章
+            if (hasMemChange && currentTab !== 'memory') {
+                addBadge('memory');
+            }
+        }
+
+        function addCpuItem(container, label, value, changed) {
+            const div = document.createElement('div');
+            div.className = 'cpu-item' + (changed ? ' changed' : '');
+            div.innerHTML = `
+        <div class="cpu-label">${label}</div>
+        <div class="cpu-value">${value}</div>
+    `;
+            container.appendChild(div);
+        }
+    </script>
+
+</body>
+
+</html>
